@@ -3,3 +3,5 @@ This was a class project done with a team. It uses Javascript D3 to create
 a data visualization. This visualization shows federal Pell Grants and state 
 college completion percentages to explore the possible correlation. It combines 
 data from multiple databases with data joins.
+
+Check out the site [here!](https://database-project-2.vercel.app/)
