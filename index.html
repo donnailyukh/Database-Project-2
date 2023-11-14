@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://d3js.org/topojson.v3.min.js"></script>
+  <style>
+    .outline {
+      fill: none;
+      stroke: black;
+      stroke-width: 1px;
+      stroke-linejoin: round;
+    }
+
+    .graticule {
+      display: none;
+    }
+
+    .gridlines .domain {
+      display: none;
+    }
+
+    .gridlines line {
+      stroke: rgb(81, 83, 106);
+    }
+
+    body {
+      background: rgb(56, 57, 82);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    section {
+      background: rgb(45, 46, 65);
+      border-radius: 10px;
+      width: 900px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      margin-bottom: 30px;
+      padding: 10px;
+    }
+
+    svg {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .tick {
+      color: white;
+    }
+
+    .domain {
+      stroke: none;
+    }
+
+    g {
+      font-size: 14px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+
+    /* Hide default HTML checkbox */
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    /* The slider */
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgb(133, 129, 174);
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider:before {
+      -webkit-transform: translateX(26px);
+      -ms-transform: translateX(26px);
+      transform: translateX(26px);
+    }
+
+    #toggleBar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 890px;
+    }
+
+    #toggleBar text {
+      color: white;
+      margin: 10px;
+    }
+
+    #barchart {
+      display: flex;
+      justify-content: space-evenly;
+      align-items: center;
+      width: 900px;
+      margin-left: 10px;
+      margin-right: 10px
+    }
+
+    #barchart text {
+      color: white;
+      margin: 10px;
+    }
+
+    h2 {
+      color: white;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <section>
+    <h2 id="mapTitle">Average Pell Grant Award to a Recipient for 2016-2017</h2>
+    <div id="toggleBar">
+      <text>Pell Grant Awards</text>
+      <label class="switch">
+        <input type="checkbox" id="toggleMap">
+        <span class="slider round"></span>
+      </label>
+      <text>College Completion %</text>
+    </div>
+    <svg id="map" height=" 600" width="800"></svg>
+    <svg id="colorLegendaward" height=" 100" width="900"></svg>
+  </section>
+  <section style="padding-bottom:30px">
+    <div id="barchart">
+      <text>Total Recipients</text>
+      <text>Average Pell Grant Award ($)</text>
+      <text>College Completion %</text>
+    </div>
+    <svg id="chart" height=" 600" width="900"></svg>
+  </section>
+
+  <script>
+
+    const pellGrantTitle = "Average Pell Grant Award to a Recipient for 2016-2017";
+    const completedCollegeTitle = "Average Percent of People Who Completed College for 2016-2020";
+
+    const mapSvg = d3.select("#map");
+    const chartSvg = d3.select("#chart");
+    const mapTitle = d3.select("#mapTitle");
+
+    const width = mapSvg.attr("width");
+    const height = mapSvg.attr("height");
+    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+    const barMargin = { top: 20, right: 20, bottom: 20, left: 70 };
+    const barWidth = chartSvg.attr("width") - barMargin.left - barMargin.right
+    const mapWidth = width - margin.left - margin.right;
+    const mapHeight = height - margin.top - margin.bottom;
+    const map = mapSvg.append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    const leg = d3.select("#colorLegendaward")
+
+    const requestData = async function () {
+
+      const us = await d3.json("./us-smaller.json");
+      console.log("us", us);
+
+      var states = topojson.feature(us, us.objects.states);     // List of state outlines to fill
+      var statesMesh = topojson.mesh(us, us.objects.states);    // 'Mesh' of all outlines put together for a stroke
+      var projection = d3.geoAlbersUsa().fitSize([mapWidth, mapHeight], states);
+      var path = d3.geoPath().projection(projection);
+      console.log(states);
+      console.log(statesMesh);
+
+      let graticule = d3.geoGraticule10();
+      console.log(graticule);
+      map.append("path").attr("class", "graticule").attr("d", path(graticule));
+
+      let statePaths = map.selectAll("path.state").data(states.features)
+        .join("path")
+        .attr("class", "state")
+        .attr("note", d => d.id)  // debugging
+        .attr("d", path)
+        .on('click', mouseClicksState);
+
+      map.append("path").datum(statesMesh)
+        .attr("class", "outline")
+        .attr("d", path);
+
+      const pellData = await d3.json("./final.json", d3.autoType);
+      console.log("Below is the pellData")
+      console.log(pellData)
+
+      let stateIdAward = {} // stateID => Average award
+      let stateIdComp = {} //stateID => Completion rates
+      let stateIdRecip = {} // stateID => total recipients
+      let stateIdName = {} // stateID => state name
+
+      Object.values(pellData).forEach(v => {
+        stateIdAward[v.state_code] = Number(v.avg_awarded);
+        stateIdComp[v.state_code] = Number(v.per_comp.replace('%', ''))
+        stateIdRecip[v.state_code] = Number(v.tot_recipient);
+        stateIdName[v.state_code] = v.state_name;
+
+
+      });
+      console.log(stateIdAward);
+      console.log(stateIdComp)
+
+      const minMaxAward = d3.extent(Object.values(stateIdAward));
+
+      const awardColorScale = d3.scaleQuantile()
+        .domain(Object.values(stateIdAward))
+        .range(["#F3EBF5", "#E3B8E6", "#AF74B5", "#8C5994", "#6B4B7A"]);
+      const minMaxComp = d3.extent(Object.values(stateIdComp));
+      const minMaxRecip = d3.extent(Object.values(stateIdRecip));
+
+
+      const compColorScale = d3.scaleQuantile()
+        .domain(Object.values(stateIdComp))
+        .range(["#F3EBF5", "#E3B8E6", "#AF74B5", "#8C5994", "#6B4B7A"]);
+
+      map.selectAll(".state")
+        .style("fill", d => awardColorScale(stateIdAward[d.id]));
+
+      let buttond3 = d3.select("#toggleMap")
+        //.text("Switch to College Completion %")
+        .on("click", function () {
+          updateMap()
+        });
+
+      const xleg = 670; //the x starting position of the legend
+      const yleg = 450; //the y starting position of the legend
+
+      // Flexible legend-drawing function - Jeff Rzeszotarski, 2022
+      //   Released under MIT Free license
+      //  Takes in an SVG element selector <legendSelector> and a d3 color scale <legendColorScale>
+      //
+      // Usage example: drawLegend("#legendID", grossIncomeColorScale)
+      function drawLegend(legendSelector, legendColorScale) {
+        // Shrink legend bar by 5 px inwards from sides of SVG
+        const offsets = {
+          width: 20,
+          top: 20,
+          bottom: 24
+        };
+        const stepSize = 4;
+        // Extend the minmax by 0% in either direction to expose more features by default
+        const minMaxExtendPercent = 0;
+
+
+        const legend = d3.select(legendSelector);
+        const legendHeight = legend.attr("height");
+        const legendBarWidth = legend.attr("width") - (offsets.width * 2);
+        const legendMinMax = d3.extent(legendColorScale.domain());
+        // recover the min and max values from most kinds of numeric scales
+        const minMaxExtension = (legendMinMax[1] - legendMinMax[0]) * minMaxExtendPercent;
+        const barHeight = legendHeight - offsets.top - offsets.bottom;
+
+        // In this case the "data" are pixels, and we get numbers to use in colorScale
+        // Use this to make axis labels
+        let barScale = d3.scaleLinear().domain([legendMinMax[0] - minMaxExtension,
+        legendMinMax[1] + minMaxExtension])
+          .range([0, legendBarWidth]);
+        let barAxis = d3.axisBottom(barScale);
+
+        // Place for bar slices to live
+        let bar = legend.append("g")
+          .attr("class", "legend colorbar")
+          .attr("transform", `translate(${offsets.width},${offsets.top})`)
+
+        // ****** SWITCHES FOR DIFFERENT SCALE TYPES ******
+
+        // Check if we're using a binning scale - if so, we make blocks of color
+        if (legendColorScale.hasOwnProperty('thresholds') || legendColorScale.hasOwnProperty('quantiles')) {
+          // Get the thresholds
+          let thresholds = [];
+          if (legendColorScale.hasOwnProperty('thresholds')) { thresholds = legendColorScale.thresholds() }
+          else { thresholds = legendColorScale.quantiles() }
+
+          const barThresholds = [legendMinMax[0], ...thresholds, legendMinMax[1]];
+          // Use the quantile breakpoints plus the min and max of the scale as tick values
+          barAxis.tickValues(barThresholds).tickFormat(d3.format(".0f"));
+
+
+          // Draw rectangles between the threshold segments
+          for (let i = 0; i < barThresholds.length - 1; i++) {
+            let dataStart = barThresholds[i];
+            let dataEnd = barThresholds[i + 1];
+            let pixelStart = barAxis.scale()(dataStart);
+            let pixelEnd = barAxis.scale()(dataEnd);
+
+            bar.append("rect")
+              .attr("x", pixelStart)
+              .attr("y", 0)
+              .attr("width", pixelEnd - pixelStart)
+              .attr("height", barHeight)
+              .style("fill", legendColorScale((dataStart + dataEnd) / 2.0));
+          }
+        }
+        // Else if we have a continuous / roundable scale
+        else if (legendColorScale.hasOwnProperty('rangeRound')) {
+
+          for (let i = 0; i < legendBarWidth; i = i + stepSize) {
+
+            let center = i + (stepSize / 2);
+            let dataCenter = barAxis.scale().invert(center);
+            // below normal scale bounds
+            if (dataCenter < legendMinMax[0]) {
+              bar.append("rect")
+                .attr("x", i)
+                .attr("y", 0)
+                .attr("width", stepSize)
+                .attr("height", barHeight)
+                .style("fill", legendColorScale(legendMinMax[0]));
+            }
+            // within normal scale bounds
+            else if (dataCenter < legendMinMax[1]) {
+              bar.append("rect")
+                .attr("x", i)
+                .attr("y", 0)
+                .attr("width", stepSize)
+                .attr("height", barHeight)
+                .style("fill", legendColorScale(dataCenter));
+            }
+            // above normal scale bounds
+            else {
+              bar.append("rect")
+                .attr("x", i)
+                .attr("y", 0)
+                .attr("width", stepSize)
+                .attr("height", barHeight)
+                .style("fill", legendColorScale(legendMinMax[1]));
+            }
+
+          }
+        }
+        // Otherwise we have a nominal scale
+        else {
+          let nomVals = legendColorScale.domain().sort();
+          // Use a scaleBand to make blocks of color and simple labels
+          let barScale = d3.scaleBand().domain(nomVals)
+            .range([0, legendBarWidth])
+            .padding(0.05);
+          barAxis.scale(barScale);
+
+          // Draw rectangles for each nominal entry
+          nomVals.forEach(d => {
+            bar.append("rect")
+              .attr("x", barScale(d))
+              .attr("y", 0)
+              .attr("width", barScale.bandwidth())
+              .attr("height", barHeight)
+              .style("fill", legendColorScale(d));
+          });
+        }
+        // DONE w/SWITCH
+
+        // Finally, draw legend labels
+        legend.append("g")
+          .attr("class", "legend axis")
+          .attr("transform", `translate(${offsets.width},${offsets.top + barHeight + 5})`)
+          .call(barAxis);
+
+      }
+
+      drawLegend("#colorLegendaward", awardColorScale)
+      leg.append("text")
+        .attr("x", 20)
+        .attr("y", 10)
+        .style("fill", "white")
+        .style("font-size", "17px")
+        .text("Average awarded to recipient in dollars ($)")
+        .attr("text-anchor", "left")
+        .style("alignment-baseline", "middle")
+
+      let arr = [];
+      let toggle = false
+      function updateMap() { //updates main map's colors and text on hit of button
+        if (toggle) {
+          map.selectAll(".state")
+            .transition()
+            .duration(500)
+            .style("fill", d => awardColorScale(stateIdAward[d.id]));
+
+          mapTitle.text(pellGrantTitle);
+
+          leg.selectAll("g").remove()
+          drawLegend("#colorLegendaward", awardColorScale)
+          leg.select("text").remove()
+          leg.append("text")
+            .attr("x", 20)
+            .attr("y", 10)
+            .style("fill", "white")
+            .style("font-size", "17px")
+            .text("Average awarded to recipient in dollars ($)")
+            .attr("text-anchor", "left")
+            .style("alignment-baseline", "middle")
+          toggle = false
+        }
+        else {
+          map.selectAll(".state")
+            .transition()
+            .duration(500)
+            .style("fill", d => compColorScale(stateIdComp[d.id]));
+
+          map.selectAll('text').remove();
+
+          mapTitle.text(completedCollegeTitle);
+
+          leg.selectAll("g").remove()
+          drawLegend("#colorLegendaward", compColorScale)
+          leg.select("text").remove()
+          leg.append("text")
+            .attr("x", 20)
+            .attr("y", 10)
+            .style("fill", "white")
+            .style("font-size", "17px")
+            .text("Average persons completed college in percent(%)")
+            .attr("text-anchor", "left")
+            .style("alignment-baseline", "middle")
+
+          if (arr.length === 0) {
+            map.append("text")
+              .text("Click up to 5 states to display barchart")
+              .attr("x", 250)
+              .attr("y", 20)
+              .style("font-size", "16px")
+              .style("fill", "white");
+          }
+          toggle = true
+        }
+        console.log(this)
+      }
+      // Code for generating bar chart
+      //axes and gridlines
+      let recipAnnot = chartSvg.append("g").attr("id", "recipA")
+      let awardAnnot = chartSvg.append("g").attr("id", "awardA")
+      let collegeAnnot = chartSvg.append("g").attr("id", "collegeA")
+
+      // domain of the scales
+      let recipExtent = [minMaxRecip[0] - 10000, minMaxRecip[1] + 100000]
+      let awardExtent = [minMaxAward[0] - 500, minMaxAward[1] + 1000]
+      let collegeExtent = [0, minMaxComp[1] + 5]
+
+      let recipScale = d3.scaleLog().domain(recipExtent).range([mapHeight, 0])
+      let awardScale = d3.scaleLinear().domain(awardExtent).range([mapHeight, 0])
+      let collegeScale = d3.scaleLinear().domain(collegeExtent).range([mapHeight, 0])
+
+      // x and y axes for each chart
+      let recipAxis = d3.axisLeft(recipScale).tickSize(0)
+      let recipGrid = d3.axisLeft(recipScale).tickSize(-barWidth / 3 + 50).tickFormat("")
+      let recipBottomAxis = d3.axisBottom()
+      let recipBottomAxisG = recipAnnot.append("g")
+        .attr("class", "x axis")
+        .attr("transform", `translate(${barMargin.left},${mapHeight + barMargin.top})`)
+      recipAnnot.append("g")
+        .attr("transform", "translate(" + barMargin.left + "," + barMargin.top + ")")
+        .call(recipAxis)
+      recipAnnot.append("g")
+        .attr("class", "gridlines")
+        .attr("transform", "translate(" + barMargin.left + "," + barMargin.top + ")")
+        .call(recipGrid)
+
+      let awardAxis = d3.axisLeft(awardScale).tickSize(0)
+      let awardGrid = d3.axisLeft(awardScale).tickSize(-barWidth / 3 + 50).tickFormat("")
+      let awardBottomAxisG = awardAnnot.append("g")
+        .attr("class", "x axis")
+        .attr("transform", `translate(${barMargin.left + barWidth / 3},${mapHeight + barMargin.top})`)
+      awardAnnot.append("g")
+        .attr("transform", "translate(" + (barMargin.left + barWidth / 3) + "," + barMargin.top + ")")
+        .call(awardAxis)
+      awardAnnot.append("g")
+        .attr("class", "gridlines")
+        .attr("transform", "translate(" + (barMargin.left + barWidth / 3) + "," + barMargin.top + ")")
+        .call(awardGrid)
+
+      let collegeAxis = d3.axisLeft(collegeScale).tickSize(0)
+      let collegeGrid = d3.axisLeft(collegeScale).tickSize(-barWidth / 3 + 50).tickFormat("")
+      let collegeBottomAxisG = collegeAnnot.append("g")
+        .attr("class", "x axis")
+        .attr("transform", `translate(${barMargin.left + 2 * barWidth / 3},${mapHeight + barMargin.top})`)
+      collegeAnnot.append("g")
+        .attr("transform", "translate(" + (barMargin.left + 2 * barWidth / 3) + "," + barMargin.top + ")")
+        .call(collegeAxis)
+      collegeAnnot.append("g")
+        .attr("class", "gridlines")
+        .attr("transform", "translate(" + (barMargin.left + 2 * barWidth / 3) + "," + barMargin.top + ")")
+        .call(collegeGrid)
+
+      // bar chart g tags
+      const recipChart = chartSvg.append("g")
+        .attr("transform", "translate(" + (barMargin.left + 5) + "," + barMargin.top + ")")
+        .attr("id", "recipients");
+      const awardChart = chartSvg.append("g")
+        .attr("transform", "translate(" + (barMargin.left + barWidth / 3 + 5) + "," + barMargin.top + ")")
+        .attr("id", "award");
+      const collegeChart = chartSvg.append("g")
+        .attr("transform", "translate(" + (barMargin.left + 2 * barWidth / 3 + 5) + "," + barMargin.top + ")")
+        .attr("id", "college");
+
+      const stateNicknames = {
+        "Alaska": 'AK', "Alabama": 'AL', "Arkansas": 'AR', "Arizona": 'AZ', "California": 'CA',
+        "Colorado": 'CO', "Connecticut": 'CT', "District of Columbia": 'DC', "Delaware": 'DE',
+        "Florida": 'FL', "Georgia": 'GA', "Hawaii": 'HI', "Iowa": 'IA', "Idaho": 'ID', "Illinois": 'IL',
+        "Indiana": 'IN', "Kansas": 'KS', "Kentucky": 'KY', "Louisiana": 'LA', "Massachusetts": 'MA',
+        "Maryland": 'MD', "Maine": 'ME', "Michigan": 'MI', "Minnesota": 'MN', "Missouri": 'MO',
+        "Mississippi": 'MS', "Montana": 'MT', "North Carolina": 'NC', "North Dakota": 'ND',
+        "Nebraska": 'NE', "New Hampshire": 'NH', "New Jersey": 'NJ', "New Mexico": 'NM', "Nevada": 'NV',
+        "New York": 'NY', "Ohio": 'OH', "Oklahoma": 'OK', "Oregon": 'OR', "Pennsylvania": 'PA',
+        "Rhode Island": 'RI', "South Carolina": 'SC', "South Dakota": 'SD', "Tennessee": 'TN',
+        "Texas": 'TX', "Utah": "UT", "Virginia": 'VA', "Vermont": 'VT', "Washington": 'WA', "Wisconsin": 'WI',
+        "West Virginia": 'WV', "Wyoming": 'WY',
+      }
+
+
+      const colors = ["#66c5cc", "#f6cf71", "#f89c74", "#b497e7", "#648fff"]; // bar chart colors
+
+      // initial instructions for the user
+      if (arr.length === 0) {
+        map.append("text")
+          .text("Click up to 5 states to display barchart")
+          .attr("x", 250)
+          .attr("y", 20)
+          .style("font-size", "16px")
+          .style("fill", "white");
+      }
+
+      // response to user clicking on a state
+      function mouseClicksState() {
+        let state = d3.select(this);
+        let stateID = state.datum().id;
+        console.log(arr.length)
+
+        // unbolds states that are re-clicked on
+        if (arr.includes(stateID) && arr.length < 6) {
+          idx = arr.indexOf(stateID);
+          arr.splice(idx, 1);
+          state.attr("stroke", "black")
+            .attr("stroke-width", 1)
+          if (arr.length === 0) {
+            map.append("text")
+              .text("Click up to 5 states to display barchart")
+              .attr("x", 250)
+              .attr("y", 20)
+              .style("font-size", "16px")
+              .style("fill", "white");
+          }
+        }
+
+        // bolds state outline when state is clicked
+        else if (arr.length < 5) {
+          arr.push(parseInt(stateID));
+          state.attr("stroke", "black")
+            .attr("stroke-width", 3)
+            .style("stroke-linejoin", "round")
+            .raise();
+          map.selectAll("text").remove()
+        }
+
+        // abbreviations of selected states
+        let stateNames = d3.map(arr, d => stateNicknames[stateIdName[d]]);
+
+        console.log("stateNames", stateNames)
+
+        // x-axis scale 
+        const stateScale = d3.scaleBand().domain(stateNames).range([0, barWidth / 3 - 50])
+          .padding(0.05);
+
+        // Update and animate axes
+        recipBottomAxis.scale(stateScale)
+        recipBottomAxisG.transition().call(recipBottomAxis); // all x axes use the same values
+        awardBottomAxisG.transition().call(recipBottomAxis);
+        collegeBottomAxisG.transition().call(recipBottomAxis);
+
+        // data join for total recipients chart
+        recipChart.selectAll('rect').data(arr, d => d) // data is the array of stateIDs
+          .join(enter => enter.append('rect')
+            .attr("fill", (d, i) => colors[i])
+            .attr("x", (d) => stateScale(stateNicknames[stateIdName[d]]))
+            .attr("y", d => recipScale(stateIdRecip[d]))
+            .attr("height", d => recipScale(recipExtent[0]) - recipScale(stateIdRecip[d]))
+            .attr("width", stateScale.bandwidth())
+            .attr("opacity", 0) // Set opacity low, then animate to 1 to make them fade in
+            .call(enter => enter.transition()
+              .attr('opacity', 1)),
+            update => update.call(update => update.transition()  // Animate resizing and movement
+              .attr("fill", (d, i) => colors[i])
+              .attr("x", (d, i) => stateScale(stateNicknames[stateIdName[d]]))
+              .attr("y", d => recipScale(stateIdRecip[d]))
+              .attr("height", d => recipScale(recipExtent[0]) - recipScale(stateIdRecip[d]))
+              .attr("width", stateScale.bandwidth()))
+              .attr("opacity", 1),
+            exit => exit.call(exit => exit.transition().attr('opacity', 0).remove())) // Animate opacity to fade out
+          .on('mouseover', function (d) { (mouseHover(d3.select(this).datum(), stateScale, "recip")) })
+          .on('mouseout', function (d) { tooltip.style("visibility", "hidden") });
+
+        // data join for average award amount chart
+        awardChart.selectAll('rect').data(arr, d => d)
+          .join(enter => enter.append('rect')
+            .attr("fill", (d, i) => colors[i])
+            .attr("x", (d) => stateScale(stateNicknames[stateIdName[d]]))
+            .attr("y", d => awardScale(stateIdAward[d]))
+            .attr("height", d => awardScale(awardExtent[0]) - awardScale(stateIdAward[d]))
+            .attr("width", stateScale.bandwidth())
+            .attr("opacity", 0)
+            .call(enter => enter.transition()
+              .attr('opacity', 1)),
+            update => update.call(update => update.transition()  // Animate resizing and movement
+              .attr("fill", (d, i) => colors[i])
+              .attr("x", (d) => stateScale(stateNicknames[stateIdName[d]]))
+              .attr("y", d => awardScale(stateIdAward[d]))
+              .attr("height", d => awardScale(awardExtent[0]) - awardScale(stateIdAward[d]))
+              .attr("width", stateScale.bandwidth()))
+              .attr("opacity", 1),
+            exit => exit.call(exit => exit.transition().attr('opacity', 0).remove()))
+          .on('mouseover', function (d) { (mouseHover(d3.select(this).datum(), stateScale, "award")) })
+          .on('mouseout', function (d) { tooltip.style("visibility", "hidden") }); // Animate opacity to fade out
+
+        // data join for college completion rate chart
+        collegeChart.selectAll('rect').data(arr, d => d)
+          .join(enter => enter.append('rect')
+            .attr("fill", (d, i) => colors[i])
+            .attr("x", (d) => stateScale(stateNicknames[stateIdName[d]]))
+            .attr("y", d => collegeScale(stateIdComp[d]))
+            .attr("height", d => collegeScale(collegeExtent[0]) - collegeScale(stateIdComp[d]))
+            .attr("width", stateScale.bandwidth())
+            .attr("opacity", 0)
+            .call(enter => enter.transition()
+              .attr('opacity', 1)),
+            update => update.call(update => update.transition()  // Animate resizing and movement
+              .attr("fill", (d, i) => colors[i])
+              .attr("x", (d) => stateScale(stateNicknames[stateIdName[d]]))
+              .attr("y", d => collegeScale(stateIdComp[d]))
+              .attr("height", d => collegeScale(collegeExtent[0]) - collegeScale(stateIdComp[d]))
+              .attr("width", stateScale.bandwidth()))
+              .attr("opacity", 1),
+            exit => exit.call(exit => exit.transition().attr('opacity', 0).remove()))
+          .on('mouseover', function (d) { (mouseHover(d3.select(this).datum(), stateScale, "college")) })
+          .on('mouseout', function (d) { tooltip.style("visibility", "hidden") }); // Animate opacity to fade out
+        console.log("arr", arr)
+
+      }
+
+      // tooltip feature that appears over a bar in a bar chart
+      let tooltip = recipChart.append("g").attr("class", "tooltip").attr("visibility", "hidden");
+      const format = d3.format("~s") // formatting string for consistency and compactness
+      let txt = tooltip.append("text")
+        .attr("fill", "#c8c8e8")
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "hanging")
+        .attr("x", 0)
+        .attr("y", 2)
+
+      // when hovering over a bar in the bar chart
+      function mouseHover(d, scale, string) {
+        console.log("hovering")
+        tooltip.style("visibility", "visible")
+        let xPos = 0; let yPos = 0;
+
+        // string determines which bar graph is hovered over
+        if (string === "recip") {
+          txt.text(format(Number(stateIdRecip[d]).toPrecision(3)));
+          xPos = scale(stateNicknames[stateIdName[d]]) + scale.bandwidth() / 2
+          yPos = recipScale(stateIdRecip[d]) - 15
+        }
+        else if (string === "award") {
+          txt.text(format(Number(stateIdAward[d]).toPrecision(3)));
+          xPos = scale(stateNicknames[stateIdName[d]]) + scale.bandwidth() / 2 + barWidth / 3
+          yPos = awardScale(stateIdAward[d]) - 15
+        }
+        else if (string === "college") {
+          txt.text(format(Number(stateIdComp[d]).toPrecision(3)))
+          xPos = scale(stateNicknames[stateIdName[d]]) + scale.bandwidth() / 2 + 2 * barWidth / 3
+          yPos = collegeScale(stateIdComp[d]) - 15
+        }
+        else return
+
+        tooltip.attr("transform", `translate(${xPos},${yPos})`);
+      }
+
+
+    }
+
+    requestData()
+  </script>
+</body>
+
+</html>
